@@ -1,4 +1,4 @@
-"""Бот работает постоянно: удобно на Mac для проверки. Запуск: python -m expense_bot.bot"""
+"""Запуск бота: на Mac — python -m expense_bot.bot, на сервере — docker compose up -d."""
 import asyncio
 import logging
 

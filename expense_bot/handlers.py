@@ -264,7 +264,7 @@ def build_router(allowed_chat_ids: frozenset[int]) -> Router:
 
 
 async def _answer(callback: CallbackQuery, text: str | None = None) -> None:
-    # В режиме запуска по расписанию кнопку могли нажать давно: Telegram уже не примет ответ.
+    # Если бот был выключен, кнопку могли нажать давно: Telegram уже не примет ответ.
     try:
         await callback.answer(text)
     except TelegramBadRequest:

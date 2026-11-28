@@ -197,24 +197,6 @@ def test_import_summary_mentions_warnings():
     assert "• 06.11, 450 RSD: «кофе» (Sergei) и CAFE &lt;1&gt;" in lines
 
 
-def test_run_once_handles_queue_and_confirms_it(monkeypatch):
-    from expense_bot import run_once
-
-    harness = Harness()
-    queue = [
-        Update.model_validate({"update_id": 41, "message": message("450 кофе", message_id=10)}),
-        Update.model_validate({"update_id": 42, "message": message("300 такси", message_id=11)}),
-    ]
-    harness.bot.get_updates = AsyncMock(side_effect=[queue, [], []])
-    monkeypatch.setattr(run_once, "load_settings", lambda: None)
-    monkeypatch.setattr(run_once, "build", lambda settings: (harness.bot, harness.dispatcher))
-    asyncio.run(run_once.main())
-
-    assert [e.comment for e in harness.sheets.rows] == ["кофе", "такси"]
-    offsets = [call.kwargs.get("offset") for call in harness.bot.get_updates.call_args_list]
-    assert offsets == [None, 43, None]  # забрали очередь, подтвердили до 42 включительно, очередь пуста
-
-
 def send_document(harness, name="izvod.pdf", content=b"%PDF-1.7 ..."):
     harness.session.file_content = content
     data = message("", message_id=20)

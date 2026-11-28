@@ -3,8 +3,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-# Локально секреты лежат в папке secrets/ (она в .gitignore),
-# в GitHub Actions — в переменных окружения из секретов репозитория.
+# Секреты лежат в папке secrets/ (она в .gitignore). На сервере Docker подключает
+# её в контейнер. Любой секрет можно переопределить переменной окружения.
 SECRETS_DIR = Path(__file__).resolve().parent.parent / "secrets"
 
 

@@ -1,4 +1,4 @@
-# Автотесты на каждый push и pull request.
+# Автотесты и проверка Docker-образа на каждый push и pull request.
 name: tests
 
 on:
@@ -17,3 +17,15 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: pytest -v
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build -t expense-bot .
+      # Смоук-тест образа: модули импортируются, часовой пояс Белграда доступен.
+      - run: >-
+          docker run --rm expense-bot python -c
+          "import expense_bot.bot; from datetime import datetime, timezone;
+          from expense_bot.dates import local_date; print('ok', local_date(datetime.now(timezone.utc)))"

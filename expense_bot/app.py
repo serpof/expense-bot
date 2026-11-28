@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 async def on_error(event: ErrorEvent) -> bool:
-    # Логи в GitHub Actions публичные: пишем только тип ошибки, без содержимого сообщений.
+    # В лог пишем только тип ошибки, без содержимого сообщений: траты в логах не нужны.
     log.error("Ошибка при обработке update %s: %s", event.update.update_id, type(event.exception).__name__)
     message = event.update.message or event.update.edited_message
     if message:
