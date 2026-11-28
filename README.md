@@ -85,13 +85,13 @@ echo "123456789" >> secrets/allowed_chats.txt   # дописать ID чата �
 
 На сервере бот работает в Docker круглосуточно и отвечает сразу. Docker позволяет держать на одном сервере несколько ботов: у каждого свой Python и свои библиотеки, и они не мешают друг другу.
 
-**Какой сервер.** Hetzner Cloud, тариф CX23: 2 vCPU, 4 ГБ памяти, 40 ГБ диска, около €6 в месяц вместе с IPv4. Такому боту нужно 100–150 МБ памяти, так что место останется и для других ботов. При создании выбери Ubuntu 24.04, локацию в Германии и добавь SSH-ключ из шага ниже. Входящие порты ботам не нужны, поэтому в разделе Firewalls оставь открытым только SSH (TCP 22).
+**Какой сервер.** Хватит 2 vCPU и 4 ГБ памяти: такому боту нужно 100–150 МБ, так что место останется и для других ботов. Подходят, например, OVHcloud VPS-1 или Hetzner Cloud CX23. При заказе выбери Ubuntu 24.04, локацию в Европе и добавь SSH-ключ из шага ниже. Входящие порты ботам не нужны: файрвол на сервере пропускает только SSH.
 
 **Ключ для входа** (на Mac, один раз):
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/bots_server -C "bots server"   # создать пару ключей; -t = тип, -f = файл, -C = подпись
-cat ~/.ssh/bots_server.pub                                      # показать открытый ключ: его вставляешь в Hetzner при создании сервера
+cat ~/.ssh/bots_server.pub                                      # показать открытый ключ: его вставляешь в панели провайдера при заказе сервера
 open -e ~/.ssh/config                                           # открыть настройки SSH; если файла нет, сначала: touch ~/.ssh/config
 ```
 
@@ -104,18 +104,19 @@ Host bots
   IdentityFile ~/.ssh/bots_server
 ```
 
-**Настройка сервера** (один раз):
+**Настройка сервера** (один раз). Первый вход — под пользователем, которого создал провайдер: у OVH это `ubuntu`, у Hetzner — `root`.
 
 ```bash
-ssh root@bots                                          # войти на сервер под root
-apt update && apt upgrade -y                           # обновить систему; -y = не переспрашивать
-apt install -y git rsync                               # git для кода, rsync для копирования ключа; обычно уже стоят
-curl -fsSL https://get.docker.com | sh                 # установить Docker вместе с docker compose
-adduser --disabled-password --gecos "" bots            # пользователь для ботов, вход только по ключу
-usermod -aG docker bots                                # разрешить ему запускать контейнеры
-rsync --archive --chown=bots:bots ~/.ssh /home/bots    # пустить его по тому же ключу, что и root
-mkdir -p /opt/bots && chown bots:bots /opt/bots        # общая папка для всех ботов
-exit                                                   # вернуться на Mac
+ssh ubuntu@bots                                             # войти на сервер; у Hetzner вместо ubuntu пиши root
+sudo apt update && sudo apt upgrade -y                      # обновить систему; sudo = от имени администратора, -y = не переспрашивать
+sudo apt install -y git rsync                               # git для кода, rsync для копирования ключа; обычно уже стоят
+curl -fsSL https://get.docker.com | sudo sh                 # установить Docker вместе с docker compose
+sudo adduser --disabled-password --gecos "" bots            # пользователь для ботов, вход только по ключу
+sudo usermod -aG docker bots                                # разрешить ему запускать контейнеры
+sudo rsync --archive --chown=bots:bots ~/.ssh /home/bots    # пустить его по тому же ключу
+sudo mkdir -p /opt/bots && sudo chown bots:bots /opt/bots   # общая папка для всех ботов
+sudo ufw allow OpenSSH && sudo ufw --force enable           # файрвол: снаружи открыт только SSH; --force = не переспрашивать
+exit                                                        # вернуться на Mac
 ```
 
 **Первый запуск:**
@@ -166,7 +167,7 @@ pytest -v   # прогнать все тесты; -v = каждый тест о�
 
 ## Стоимость
 
-Сервер — около €6 в месяц, и на нём поместятся и другие боты. Telegram, Google Таблицы и курсы НБС бесплатны. Claude API (модель Claude Haiku 5.5) нужен для новых слов и выписок и стоит центы в месяц.
+Сервер — €4–6 в месяц, и на нём поместятся и другие боты. Telegram, Google Таблицы и курсы НБС бесплатны. Claude API (модель Claude Haiku 5.5) нужен для новых слов и выписок и стоит центы в месяц.
 
 ## Устройство
 
