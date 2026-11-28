@@ -1,0 +1,16 @@
+# Запуск на сервере: docker compose up -d --build
+name: expense-bot
+
+services:
+  bot:
+    build: .
+    restart: unless-stopped  # поднимать после падения и после перезагрузки сервера
+    init: true  # корректная остановка по docker compose down
+    mem_limit: 512m  # бот не съест память соседних ботов
+    volumes:
+      - ./secrets:/app/secrets:ro  # секреты с сервера, только для чтения
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"  # логи не забьют диск: максимум 3 файла по 10 МБ
+        max-file: "3"

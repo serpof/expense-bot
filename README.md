@@ -81,22 +81,80 @@ echo "123456789" >> secrets/allowed_chats.txt   # дописать ID чата �
 2. В @BotFather: `/setprivacy` → выбери бота → `Disable`. Иначе в группе бот видит только команды. После этого удали бота из группы и добавь снова.
 3. Отправь в группе `/start` и допиши ID группы в `secrets/allowed_chats.txt`. У групп ID отрицательный, например `-1001234567890`.
 
-### 4. Запуск по расписанию в GitHub Actions
+### 4. Сервер
 
-Бот запускается каждые 15 минут с 7:00 до 23:00 зимой (летом с 8:00 до полуночи), забирает накопившиеся сообщения и выключается. Ночью сообщения ждут в Telegram: он хранит их 24 часа. Ответ приходит с задержкой до 15 минут.
+На сервере бот работает в Docker круглосуточно и отвечает сразу. Docker позволяет держать на одном сервере несколько ботов: у каждого свой Python и свои библиотеки, и они не мешают друг другу.
+
+**Какой сервер.** Hetzner Cloud, тариф CX23: 2 vCPU, 4 ГБ памяти, 40 ГБ диска, около €6 в месяц вместе с IPv4. Такому боту нужно 100–150 МБ памяти, так что место останется и для других ботов. При создании выбери Ubuntu 24.04, локацию в Германии и добавь SSH-ключ из шага ниже. Входящие порты ботам не нужны, поэтому в разделе Firewalls оставь открытым только SSH (TCP 22).
+
+**Ключ для входа** (на Mac, один раз):
 
 ```bash
-gh secret set TELEGRAM_TOKEN < secrets/bot_token.txt                       # секрет репозитория из файла; значение не появится в терминале
-gh secret set GOOGLE_SERVICE_ACCOUNT_JSON < secrets/service_account.json  # ключ Google
-gh secret set ANTHROPIC_API_KEY < secrets/anthropic_key.txt               # ключ Claude API
-gh secret set ALLOWED_CHAT_IDS < secrets/allowed_chats.txt                # разрешённые чаты
-gh variable set BOT_SCHEDULE --body on                                    # включить расписание; off — выключить
-gh workflow run bot.yml                                                   # запустить один раз прямо сейчас, не дожидаясь расписания
+ssh-keygen -t ed25519 -f ~/.ssh/bots_server -C "bots server"   # создать пару ключей; -t = тип, -f = файл, -C = подпись
+cat ~/.ssh/bots_server.pub                                      # показать открытый ключ: его вставляешь в Hetzner при создании сервера
+open -e ~/.ssh/config                                           # открыть настройки SSH; если файла нет, сначала: touch ~/.ssh/config
 ```
 
-- Пока расписание включено, не запускай бота на Mac: два бота мешают друг другу забирать сообщения.
-- В публичном репозитории GitHub отключает расписание, если 60 дней не было коммитов. Включить обратно: вкладка Actions → bot → Enable workflow.
-- Логи Actions в публичном репозитории видны всем, поэтому бот пишет туда только служебные сообщения, без трат.
+Допиши в `~/.ssh/config`, подставив IP сервера. После этого вместо адреса и пути к ключу достаточно писать `bots`:
+
+```
+Host bots
+  HostName 203.0.113.10
+  User bots
+  IdentityFile ~/.ssh/bots_server
+```
+
+**Настройка сервера** (один раз):
+
+```bash
+ssh root@bots                                          # войти на сервер под root
+apt update && apt upgrade -y                           # обновить систему; -y = не переспрашивать
+apt install -y git rsync                               # git для кода, rsync для копирования ключа; обычно уже стоят
+curl -fsSL https://get.docker.com | sh                 # установить Docker вместе с docker compose
+adduser --disabled-password --gecos "" bots            # пользователь для ботов, вход только по ключу
+usermod -aG docker bots                                # разрешить ему запускать контейнеры
+rsync --archive --chown=bots:bots ~/.ssh /home/bots    # пустить его по тому же ключу, что и root
+mkdir -p /opt/bots && chown bots:bots /opt/bots        # общая папка для всех ботов
+exit                                                   # вернуться на Mac
+```
+
+**Первый запуск:**
+
+```bash
+ssh bots git clone https://github.com/serpof/expense-bot.git /opt/bots/expense-bot   # скачать код на сервер; репозиторий публичный, ключ GitHub не нужен
+ssh bots mkdir /opt/bots/expense-bot/secrets                                          # папка для секретов
+scp ~/expense-bot/secrets/* bots:/opt/bots/expense-bot/secrets/                       # скопировать секреты с Mac на сервер по SSH
+```
+
+Останови бота на Mac (Ctrl+C): два бота с одним токеном мешают друг другу. Потом:
+
+```bash
+ssh bots "cd /opt/bots/expense-bot && docker compose up -d --build"   # собрать образ и запустить бота; -d = в фоне, --build = пересобрать
+ssh bots "cd /opt/bots/expense-bot && docker compose logs -f"         # смотреть логи; выход — Ctrl+C
+```
+
+Бот поднимется сам после падения и после перезагрузки сервера.
+
+**Обновление** после мержа в master:
+
+```bash
+ssh bots "cd /opt/bots/expense-bot && git pull && docker compose up -d --build"   # скачать новый код и перезапустить бота
+```
+
+Если поменял секреты на Mac (например, добавил чат), скопируй их снова командой `scp` и перезапусти бота:
+
+```bash
+ssh bots "cd /opt/bots/expense-bot && docker compose restart"   # перезапустить бота, чтобы он перечитал секреты
+```
+
+**Проверка:**
+
+```bash
+ssh bots docker ps                    # какие боты запущены и сколько времени работают
+ssh bots docker stats --no-stream     # сколько памяти и процессора занимает каждый бот
+```
+
+**Другие боты** кладутся рядом, в `/opt/bots/<имя>`, со своими `Dockerfile` и `compose.yaml`, и запускаются той же командой. Если бот хранит данные в файлах, например базу SQLite, папку с ними подключают в `compose.yaml` через `volumes`. Иначе данные пропадут при пересборке.
 
 ## Тесты
 
@@ -104,11 +162,11 @@ gh workflow run bot.yml                                                   # за
 pytest -v   # прогнать все тесты; -v = каждый тест отдельной строкой
 ```
 
-Тесты не ходят в сеть: Telegram, Google Таблица, Claude и курсы валют подменены заглушками из `tests/fakes.py`. На каждый push тесты запускаются в GitHub Actions.
+Тесты не ходят в сеть: Telegram, Google Таблица, Claude и курсы валют подменены заглушками из `tests/fakes.py`. На каждый push GitHub Actions прогоняет тесты, собирает Docker-образ и проверяет, что бот в нём запускается.
 
 ## Стоимость
 
-Telegram, Google Таблицы, курсы НБС и GitHub Actions для публичного репозитория бесплатны. Claude API (модель Claude Haiku 5.5) нужен для новых слов и выписок и стоит центы в месяц.
+Сервер — около €6 в месяц, и на нём поместятся и другие боты. Telegram, Google Таблицы и курсы НБС бесплатны. Claude API (модель Claude Haiku 5.5) нужен для новых слов и выписок и стоит центы в месяц.
 
 ## Устройство
 
@@ -123,5 +181,6 @@ Telegram, Google Таблицы, курсы НБС и GitHub Actions для пу
 | `reports.py` | отчёт `/month` |
 | `service.py` | сценарии: записать трату, исправить, загрузить выписку |
 | `handlers.py` | обработчики Telegram |
-| `bot.py` | бот работает постоянно — для Mac |
-| `run_once.py` | один проход по очереди сообщений — для GitHub Actions |
+| `bot.py` | запуск бота — на Mac и на сервере |
+
+`Dockerfile` и `compose.yaml` собирают и запускают бота на сервере.
